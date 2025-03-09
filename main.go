@@ -40,6 +40,7 @@ var (
 		"Path under which the metrics of the devices are fetched")
 	showVersion = flag.Bool("version", false,
 		"Show version information.")
+	targetIP = flag.String("target", "", "IP of the mystrom gagi")
 )
 var (
 	mystromDurationCounterVec *prometheus.CounterVec
@@ -91,16 +92,16 @@ func main() {
 
 	router := mux.NewRouter()
 	router.Handle(*metricsPath, promhttp.HandlerFor(telemetryRegistry, promhttp.HandlerOpts{}))
-	router.HandleFunc(*devicePath, scrapeHandler)
-	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write(landingPage)
-	})
+	// router.HandleFunc(*devicePath, scrapeHandler)
+	router.HandleFunc("/", scrapeHandler)
 	log.Infoln("Listening on address " + *listenAddress)
 	log.Fatal(http.ListenAndServe(*listenAddress, router))
 }
 
 func scrapeHandler(w http.ResponseWriter, r *http.Request) {
-	target := r.URL.Query().Get("target")
+	// target := r.URL.Query().Get("target")
+	target := *targetIP
+	fmt.Println(target)
 	if target == "" {
 		http.Error(w, "'target' parameter must be specified", http.StatusBadRequest)
 		return
@@ -114,11 +115,11 @@ func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 	duration := time.Since(start).Seconds()
 	if err != nil {
 		if strings.Contains(fmt.Sprintf("%v", err), "unable to connect to target") {
-			mystromRequestsCounterVec.WithLabelValues(target, ERROR_SOCKET.String()).Inc()
+			mystromRequestsCounterVec.WithLabelValues(target, string(ERROR_SOCKET)).Inc()
 		} else if strings.Contains(fmt.Sprintf("%v", err), "i/o timeout") {
-			mystromRequestsCounterVec.WithLabelValues(target, ERROR_TIMEOUT.String()).Inc()
+			mystromRequestsCounterVec.WithLabelValues(target, string(ERROR_TIMEOUT)).Inc()
 		} else {
-			mystromRequestsCounterVec.WithLabelValues(target, ERROR_PARSING_VALUE.String()).Inc()
+			mystromRequestsCounterVec.WithLabelValues(target, string(ERROR_PARSING_VALUE)).Inc()
 		}
 		http.Error(
 			w,
@@ -129,7 +130,7 @@ func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mystromDurationCounterVec.WithLabelValues(target).Add(duration)
-	mystromRequestsCounterVec.WithLabelValues(target, OK.String()).Inc()
+	mystromRequestsCounterVec.WithLabelValues(target, string(OK)).Inc()
 
 	promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{}).ServeHTTP(w, r)
 }
