@@ -36,12 +36,16 @@ type switchInfo struct {
 type Exporter struct {
 	myStromSwitchIp string
 	switchType      float64
+	municipality    string
+	powerClass      string
 }
 
 // NewExporter --
-func NewExporter(switchIP string) *Exporter {
+func NewExporter(switchIP string, munipalicity string, powerCost string) *Exporter {
 	return &Exporter{
 		myStromSwitchIp: switchIP,
+		municipality:    munipalicity,
+		powerClass:      powerCost,
 	}
 }
 
@@ -80,7 +84,20 @@ func (e *Exporter) Scrape() (prometheus.Gatherer, error) {
 	}
 	log.Debugf("report: %#v", report)
 
-	if err := registerMetrics(reg, report, e.myStromSwitchIp, e.switchType); err != nil {
+	var powerCost float64
+	if e.municipality != "" && e.powerClass != "" {
+		municipalityID, err := GetMunicipalityID(e.municipality)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get municipality ID: %v", err.Error())
+		}
+
+		powerCost, err = GetEnergyPrice(municipalityID, e.powerClass)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get energy price: %v", err.Error())
+		}
+	}
+
+	if err := registerMetrics(reg, report, powerCost, e.myStromSwitchIp, e.switchType); err != nil {
 		return nil, fmt.Errorf("failed to register metrics : %v", err.Error())
 	}
 
@@ -118,7 +135,7 @@ func (e *Exporter) fetchData(urlpath string) ([]byte, error) {
 }
 
 // registerMetrics --
-func registerMetrics(reg prometheus.Registerer, data switchReport, target string, st float64) error {
+func registerMetrics(reg prometheus.Registerer, data switchReport, powerCost float64, target string, st float64) error {
 
 	// --
 	collectorRelay := prometheus.NewGaugeVec(
@@ -184,6 +201,22 @@ func registerMetrics(reg prometheus.Registerer, data switchReport, target string
 		}
 
 		collectorTemperature.WithLabelValues(target).Set(data.Temperature)
+
+		if powerCost != 0 {
+			collectorPowerCost := prometheus.NewGaugeVec(
+				prometheus.GaugeOpts{
+					Namespace: namespace,
+					Name:      "power_cost",
+					Help:      "The cost of power in swiss centimes per kWh",
+				},
+				[]string{"instance"})
+
+			if err := reg.Register(collectorPowerCost); err != nil {
+				return fmt.Errorf("failed to register metric %v: %v", "power_cost", err.Error())
+			}
+
+			collectorPowerCost.WithLabelValues(target).Set(powerCost)
+		}
 
 	}
 
