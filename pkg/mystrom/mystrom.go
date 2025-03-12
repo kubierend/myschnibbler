@@ -13,6 +13,8 @@ import (
 
 const namespace = "mystrom"
 
+var powerCost float64
+
 // 5 second timeout, might need to be increased
 const reqTimeout = time.Second * 5
 
@@ -84,8 +86,7 @@ func (e *Exporter) Scrape() (prometheus.Gatherer, error) {
 	}
 	log.Debugf("report: %#v", report)
 
-	var powerCost float64
-	if e.municipality != "" && e.powerClass != "" {
+	if e.municipality != "" && e.powerClass != "" && powerCost == 0 {
 		municipalityID, err := GetMunicipalityID(e.municipality)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get municipality ID: %v", err.Error())
