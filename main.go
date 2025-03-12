@@ -40,37 +40,14 @@ var (
 		"Path under which the metrics of the devices are fetched")
 	showVersion = flag.Bool("version", false,
 		"Show version information.")
-	targetIP = flag.String("target", "", "IP of the mystrom gagi")
+	targetIP     = flag.String("target", "", "IP of the mystrom gagi")
+	municipality = flag.String("municipality", "", "Municipality from where the power cost is calculated")
+	powerCost    = flag.String("power-category", "H4", "Power cost category")
 )
 var (
 	mystromDurationCounterVec *prometheus.CounterVec
 	mystromRequestsCounterVec *prometheus.CounterVec
 )
-var landingPage = []byte(`<html>
-<head>
-	<title>myStrom switch report Exporter</title>
-	<style>
-		label{
-		display:inline-block;
-		width:75px;
-		}
-		form label {
-		margin: 10px;
-		}
-		form input {
-		margin: 10px;
-		}
-	</style>
-</head>
-<body>
-<h1>myStrom Exporter</h1>
-<form action="` + *devicePath + `">
-	<label>Target:</label> <input type="text" name="target" placeholder="X.X.X.X" value="1.2.3.4"><br>
-	<input type="submit" value="Submit">
-</form>
-<p><a href='` + *metricsPath + `'>Metrics</a></p>
-</body>
-</html>`)
 
 func main() {
 
@@ -101,14 +78,13 @@ func main() {
 func scrapeHandler(w http.ResponseWriter, r *http.Request) {
 	// target := r.URL.Query().Get("target")
 	target := *targetIP
-	fmt.Println(target)
 	if target == "" {
 		http.Error(w, "'target' parameter must be specified", http.StatusBadRequest)
 		return
 	}
 
 	log.Infof("got scrape request for target '%v'", target)
-	exporter := mystrom.NewExporter(target)
+	exporter := mystrom.NewExporter(target, *municipality, *powerCost)
 
 	start := time.Now()
 	gatherer, err := exporter.Scrape()
